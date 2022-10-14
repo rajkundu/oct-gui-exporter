@@ -1,0 +1,6 @@
+# Pycache
+__pycache__/
+
+# Input/Output files
+**.txt
+**.csv
