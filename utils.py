@@ -1,18 +1,11 @@
-from datetime import date
 import numpy as np
 import cv2
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract'
 import pyautogui
-import PIL
 import re
 import time
-from dateutil import parser
-
-SCREEN_WIDTH = 1680
-SCREEN_HEIGHT = 1050
-NATIVE_SCREEN_WIDTH = None
-NATIVE_SCREEN_HEIGHT = None
+from pathlib import Path
 
 PTP_THRESH = 40
 SUM_THRESH = 160
@@ -31,30 +24,11 @@ def display_roi(img, roi, color=(255, 0, 0), thickness=1):
 	cv2.imshow("ROI", disp)
 	cv2.waitKey(0)
 
-def set_screen_scale():
-	global NATIVE_SCREEN_WIDTH, NATIVE_SCREEN_HEIGHT
-	NATIVE_SCREEN_HEIGHT, NATIVE_SCREEN_WIDTH, _ = screenshot().shape
-
-# Scale roi to fit actual screenshot dimensions
-def screen_scale(locs, reverse=False):
-	if NATIVE_SCREEN_WIDTH is None:
-		set_screen_scale()
-	factor = (SCREEN_WIDTH / NATIVE_SCREEN_WIDTH) if reverse else (NATIVE_SCREEN_WIDTH / SCREEN_WIDTH)
-	if(type(locs) is int):
-		return int(locs * factor)
-	else:
-		return tuple([int(loc * factor) for loc in locs])
-
 def scale_img(img, scaling_factor):
 	height, width = img.shape[:2]
 	return cv2.resize(img, (int(width * scaling_factor), int(height * scaling_factor)), interpolation = cv2.INTER_AREA)
 
-def get_selection_yrange(img, x, y1, y2, target_px):
-	close = [np.allclose(px, target_px, atol=10, rtol=0) for px in img[y1:y2,x]]
-	start, end = np.where(close)[0][[0, -1]]
-	return y1+start, y1+end
-
-def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=False):
+def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=False, psm=None):
 	if roi is None:
 		roi = (0, 0, img.shape[1], img.shape[0])
 	x1, y1, x2, y2 = roi
@@ -71,7 +45,12 @@ def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=Fals
 		cv2.imshow("tesseract input", img_cropped)
 		cv2.waitKey(0)
 
-	results = pytesseract.image_to_data(img_cropped, output_type=pytesseract.Output.DICT)
+	# Build config
+	cfgstr = ""
+	if psm is not None:
+		cfgstr += f"--psm {psm}"
+
+	results = pytesseract.image_to_data(img_cropped, output_type=pytesseract.Output.DICT, config=cfgstr)
 	# filter out weak confidence text localizations
 	filtered = {}
 	for i in range(len(results["text"])):
@@ -99,14 +78,149 @@ def parse_onh_score(text):
 	regexp = re.compile("\(\d{1,2}\)")
 	return int(re.search(regexp, text).group()[1:-1])
 
-def interact_dropdown(dropdown, image_type):
+def click(*args, **kwargs):
+	pyautogui.click(*args, **kwargs)
+	time.sleep(0.1)
+
+def rightClick(*args, **kwargs):
+	pyautogui.rightClick(*args, **kwargs)
+	time.sleep(0.1)
+
+def interact_save_dialog(save_path: Path):
+	pyautogui.keyDown('ctrl') # focus on path input bar
+	pyautogui.press('l')
+	pyautogui.keyUp('ctrl')
+
+	pyautogui.typewrite(str(save_path))
+	pyautogui.press('enter')
+	
+	pyautogui.keyDown('alt') # focus on image save type dropdown
+	pyautogui.press('t')
+	pyautogui.keyUp('alt')
+	pyautogui.press('t') # press t to select TIFF
+
+	pyautogui.press('enter') # save image & close dialog
+	time.sleep(0.1) # wait for dialog to close
+
+# EXPORT SEQUENCES
+def export_optic_disc(save_path: Path, eye: str):
+	eye = eye.upper()
+	if eye not in ("OD", "OS"):
+		raise ValueError("eye param must be one of ('OD', 'OS')")
+
+	click((1245, 73)) # click on first item in third dropdown column
+	if not wait_for_scan_loading():
+		return False
+
+	# Right click on scan
+	if eye == 'OD':
+		rightClick((390, 355)) # right click for context menu
+	else:
+		rightClick((1320, 355)) # right click for context menu
+	pyautogui.press('f') # enter fullscreen
+	time.sleep(0.1)
+
+	rightClick((960, 540)) # right click in center of screen for context menu
+	pyautogui.press('s') # open save dialog
+
+	time.sleep(0.1)
+	interact_save_dialog(save_path)
+
+	# exit fullscreen
+	pyautogui.press('tab')
+	pyautogui.press('enter')
+	time.sleep(0.1)
+
+def export_mac_cube(save_path: Path):
+	click((1245, 73)) # click on first item in third dropdown column
+	if not wait_for_scan_loading():
+		return False
+	
+	rightClick((820, 420)) # right click on image
+	pyautogui.press('f') # enter fullscreen
+	time.sleep(0.1)
+
+	rightClick((960, 540)) # right click in center of screen for context menu
+	pyautogui.press('s') # select "Save Image As..."
+	pyautogui.press('enter') # open save dialog
+
+	time.sleep(0.1)
+	interact_save_dialog(save_path)
+
+	# exit fullscreen
+	pyautogui.press('tab')
+	pyautogui.press('enter')
+	time.sleep(0.1)
+
+def export_onh(save_path: Path):
+	click((1245, 73)) # click on first item in third dropdown column
+	if not wait_for_scan_loading():
+		return False
+	
+	pyautogui.moveTo((780, 235)) # move to & click Fullscreen button
+	time.sleep(0.1)
+	click()
+	time.sleep(0.1)
+
+	click((1195, 15)) # click Save button to open save dialog
+
+	time.sleep(0.1)
+	interact_save_dialog(save_path)
+
+	pyautogui.press('esc') # exit fullscreen
+	time.sleep(0.1)
+
+def export_6x6(save_path: Path):
+	click((1245, 73)) # click on first item in third dropdown column
+	if not wait_for_scan_loading():
+		return False
+	
+	click((80, 430)) # open Superficial Capillary Plexus scan
+	time.sleep(0.2)
+	
+	pyautogui.moveTo((857, 235)) # move to & click Fullscreen button
+	time.sleep(0.1)
+	click()
+	time.sleep(0.1)
+
+	click((1195, 15)) # click Save button to open save dialog
+
+	time.sleep(0.1)
+	interact_save_dialog(save_path)
+
+	pyautogui.press('esc') # exit fullscreen
+	time.sleep(0.1)
+
+def export_3x3(save_path: Path):
+	export_6x6(save_path) # do exact same thing as for 6x6
+
+def export_hd21(save_path: Path):
+	# wait for scan load
+	if not wait_for_scan_loading():
+		return False
+
+	rightClick((960, 540)) # right click in image for context menu
+	pyautogui.press('f') # enter fullscreen
+	time.sleep(0.1)
+
+	rightClick((960, 540)) # right click in center of screen for context menu
+	pyautogui.press('s') # open save dialog
+	time.sleep(0.1)
+
+	interact_save_dialog(save_path)
+
+	# exit fullscreen
+	pyautogui.press('tab')
+	pyautogui.press('enter')
+	time.sleep(0.1)
+
+def interact_dropdown(dropdown: dict, save_path: Path):
+	eye = dropdown['eye'].upper()
 	x1, base_y = dropdown['loc']
 	x2 = x1 + dropdown['width']
 	done = False
 	counter = 0
 	max_score = -1
-	target_onh_option_num = None
-	num_onhs = 0
 	dropdown_options = []
 
 	while not done:
@@ -120,17 +234,42 @@ def interact_dropdown(dropdown, image_type):
 
 		s = screenshot()
 
-		results = run_tesseract(s, current_option_roi, 10)
+		results = run_tesseract(s, current_option_roi, 10, psm=6)
 		text = process_dropdown_text(results['text'])
 		dropdown_options.append(text)
 
-		# if text[0:3] == "onh":
-		# 	score = parse_onh_score(text)
-		# 	if(score > max_score):
-		# 		target_onh_option_num = counter
-		# 		max_score = score
-
-		# 	num_onhs += 1
+		# Optic Disc
+		if "optic disc cube" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			time.sleep(0.1)
+			export_optic_disc(save_path, eye)
+		# Macular Cube
+		if "macular cube" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			time.sleep(0.1)
+			export_mac_cube(save_path)
+		# ONH Angiography
+		elif "onh angio" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			time.sleep(0.1)
+			export_onh(save_path)
+		# 6x6 Angiography
+		elif "angio" in text and "6x6" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			time.sleep(0.1)
+			export_6x6(save_path)
+		# 3x3 Angiography
+		elif "angio" in text and "3x3" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			time.sleep(0.1)
+			export_3x3(save_path)
+		# HD21
+		elif "hd 21" in text:
+			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			export_hd21(save_path)
+		# Other
+		else:
+			print(f"UNRECOGNIZED SCAN: '{text}'")
 
 		done = np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[y2+dropdown['sample_margin_y']][x1:x1+30]])
 		
@@ -199,7 +338,7 @@ def wait_for_scan_loading(timeout_sec=30):
 		if(timer > timeout_sec):
 			return False
 		s = screenshot()
-		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[940:1100,1400]]):
+		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[480:600,810:930]]):
 			done_counter = 0
 		else:
 			done_counter += 1

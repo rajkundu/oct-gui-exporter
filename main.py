@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import time
 import utils
-import winsound
+from pathlib import Path
 
 # User switches to application
 time.sleep(3)
@@ -12,6 +12,8 @@ time.sleep(3)
 PATIENT_ID_ENTRY = (417, 167)
 FIRST_PATIENT = (50, 300, 115, 315)
 FINISH_BUTTON = (1840, 1024)
+
+EXPORT_BASE_PATH = Path("D:/AutoExport")
 
 img = utils.screenshot()
 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -22,6 +24,7 @@ img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 # sys.exit(0)
 
 EYE_LEFT_DROPDOWN = {
+	"eye": "OS",
 	"loc": (710, 63),
 	"width": 495,
 	"option_height": 20,
@@ -33,6 +36,7 @@ EYE_LEFT_DROPDOWN = {
 	"max_options": 20
 }
 EYE_RIGHT_DROPDOWN = {
+	"eye": "OD",
 	"loc": (170, 63),
 	"width": 495,
 	"option_height": 20,
@@ -45,6 +49,10 @@ EYE_RIGHT_DROPDOWN = {
 }
 
 def get_data(pt_id, eye):
+	eye = eye.upper()
+	if eye not in ("OD", "OS"):
+		raise ValueError("eye param must be one of ('OD', 'OS')")
+
 	# 1) Activate patient ID field
 	pyautogui.click(PATIENT_ID_ENTRY)
 	time.sleep(0.7)
@@ -72,12 +80,14 @@ def get_data(pt_id, eye):
 		raise TimeoutError(f"Opening chart of pt {pt_id} exceeded 10 sec")
 
 	# 4) Dropdown stuff
-	utils.interact_dropdown(EYE_LEFT_DROPDOWN if eye.lower() == "left" or eye.lower() == "l" else EYE_RIGHT_DROPDOWN, "6x6")
-	if(1 > -1):
-		pass
+	if eye == "OS":
+		dropdown = EYE_LEFT_DROPDOWN
 	else:
-		# No ONH exam for this patient's L/R eye (whatever was passed)!
-		raise RuntimeError(f"ERROR: No ONH scan found")
+		dropdown = EYE_RIGHT_DROPDOWN
+	save_path = EXPORT_BASE_PATH / f"{pt_id.upper()}_{eye}" # folder name = CZMI000000001_OD
+	save_path.mkdir(parents=True, exist_ok=True) # ensure pt. folder exists
+
+	utils.interact_dropdown(dropdown, save_path)
 
 	# 7) Click finish
 	pyautogui.click(FINISH_BUTTON)
@@ -89,14 +99,13 @@ def get_data(pt_id, eye):
 if __name__ == "__main__":
 	with open("input.txt", "r") as input_txt:
 		for line in input_txt:
-			line = line.strip()
+			line = line.strip().upper()
 			if line[0] == "#":
 				# print(f"Skipping '{line}'")
 				continue
 			pt_id, od_os = line[:-3], line[-2:]
-			eye = "left" if od_os.lower() == "os" else "right"
 			try:
-				measurements, exam_date, exam_time = get_data(pt_id, eye)
+				measurements, exam_date, exam_time = get_data(pt_id, od_os)
 				# csvrow = ','.join([
 				# 	pt_id,
 				# 	pt_id + "_" + od_os.upper(),
