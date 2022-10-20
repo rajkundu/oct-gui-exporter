@@ -3,12 +3,8 @@ import cv2
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract'
 import pyautogui
-import re
 import time
 from pathlib import Path
-
-PTP_THRESH = 40
-SUM_THRESH = 160
 
 def screenshot(roi=None):
 	s = cv2.cvtColor(np.array(pyautogui.screenshot().convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -74,10 +70,6 @@ def midpoint(roi):
 	x1, y1, x2, y2 = roi
 	return (int((x1 + x2) / 2.0), int((y1 + y2) / 2.0))
 
-def parse_onh_score(text):
-	regexp = re.compile("\(\d{1,2}\)")
-	return int(re.search(regexp, text).group()[1:-1])
-
 def click(*args, **kwargs):
 	pyautogui.click(*args, **kwargs)
 	time.sleep(0.1)
@@ -108,16 +100,17 @@ def export_optic_disc(save_path: Path, eye: str):
 	if eye not in ("OD", "OS"):
 		raise ValueError("eye param must be one of ('OD', 'OS')")
 
+	wait_for_scan_subdata_load()
 	click((1245, 73)) # click on first item in third dropdown column
-	if not wait_for_scan_loading():
+	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
+	if not wait_for_loading_popup():
 		return False
 
 	# Right click on scan
 	if eye == 'OD':
-		rightClick((390, 355)) # right click for context menu
+		pyautogui.doubleClick((390, 355)) # enter fullscreen
 	else:
-		rightClick((1320, 355)) # right click for context menu
-	pyautogui.press('f') # enter fullscreen
+		pyautogui.doubleClick((1320, 355)) # enter fullscreen
 	time.sleep(0.1)
 
 	rightClick((960, 540)) # right click in center of screen for context menu
@@ -131,16 +124,25 @@ def export_optic_disc(save_path: Path, eye: str):
 	pyautogui.press('enter')
 	time.sleep(0.1)
 
-def export_mac_cube(save_path: Path):
-	click((1245, 73)) # click on first item in third dropdown column
-	if not wait_for_scan_loading():
+	return True
+
+def export_mac_cube(save_path: Path, eye: str):
+	eye = eye.upper()
+	if eye not in ("OD", "OS"):
+		raise ValueError("eye param must be one of ('OD', 'OS')")
+
+	wait_for_scan_subdata_load()
+	click((1245, 143)) # click on "Ganglion Cell OU Analysis"
+	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
+	if not wait_for_loading_popup():
 		return False
 	
-	rightClick((820, 420)) # right click on image
-	pyautogui.press('f') # enter fullscreen
+	# Right click on scan
+	if eye == 'OD':
+		rightClick((180, 320)) # right click for context menu
+	else:
+		rightClick((1240, 320)) # right click for context menu
 	time.sleep(0.1)
-
-	rightClick((960, 540)) # right click in center of screen for context menu
 	pyautogui.press('s') # select "Save Image As..."
 	pyautogui.press('enter') # open save dialog
 
@@ -152,9 +154,13 @@ def export_mac_cube(save_path: Path):
 	pyautogui.press('enter')
 	time.sleep(0.1)
 
+	return True
+
 def export_onh(save_path: Path):
+	wait_for_scan_subdata_load()
 	click((1245, 73)) # click on first item in third dropdown column
-	if not wait_for_scan_loading():
+	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
+	if not wait_for_loading_popup():
 		return False
 	
 	pyautogui.moveTo((780, 235)) # move to & click Fullscreen button
@@ -170,9 +176,13 @@ def export_onh(save_path: Path):
 	pyautogui.press('esc') # exit fullscreen
 	time.sleep(0.1)
 
+	return True
+
 def export_6x6(save_path: Path):
+	wait_for_scan_subdata_load()
 	click((1245, 73)) # click on first item in third dropdown column
-	if not wait_for_scan_loading():
+	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
+	if not wait_for_loading_popup():
 		return False
 	
 	click((80, 430)) # open Superficial Capillary Plexus scan
@@ -191,16 +201,17 @@ def export_6x6(save_path: Path):
 	pyautogui.press('esc') # exit fullscreen
 	time.sleep(0.1)
 
+	return True
+
 def export_3x3(save_path: Path):
-	export_6x6(save_path) # do exact same thing as for 6x6
+	return export_6x6(save_path) # do exact same thing as for 6x6
 
 def export_hd21(save_path: Path):
 	# wait for scan load
-	if not wait_for_scan_loading():
+	if not wait_for_loading_popup():
 		return False
 
-	rightClick((960, 540)) # right click in image for context menu
-	pyautogui.press('f') # enter fullscreen
+	pyautogui.doubleClick((960, 540)) # enter fullscreen
 	time.sleep(0.1)
 
 	rightClick((960, 540)) # right click in center of screen for context menu
@@ -214,16 +225,22 @@ def export_hd21(save_path: Path):
 	pyautogui.press('enter')
 	time.sleep(0.1)
 
-def interact_dropdown(dropdown: dict, save_path: Path):
-	eye = dropdown['eye'].upper()
+	return True
+
+def visit_dates_generator(dropdown: dict):
 	x1, base_y = dropdown['loc']
 	x2 = x1 + dropdown['width']
-	done = False
 	counter = 0
-	max_score = -1
-	dropdown_options = []
 
-	while not done:
+	# Press tab to move focus from date dropdown so that first item not selected/blue
+	pyautogui.press('tab')
+	time.sleep(0.1)
+
+	while True:
+		#failsafe
+		if(counter > dropdown['max_options']):
+			break
+
 		if counter >= dropdown['num_visible_options']:
 			pyautogui.click(dropdown['down_button'])
 			time.sleep(0.1)
@@ -231,8 +248,65 @@ def interact_dropdown(dropdown: dict, save_path: Path):
 		y1 = int(base_y + min(counter, dropdown['num_visible_options'] - 1)*dropdown['option_height'])
 		y2 = int(y1 + dropdown['option_height'])
 		current_option_roi = (x1, y1, x2, y2)
-
 		s = screenshot()
+		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[(y1+y2)//2][x1:x1+30]]):
+			break
+
+		results = run_tesseract(s, current_option_roi, 10, psm=6, disp=False)
+		text = process_dropdown_text(results['text'])
+
+		# Click on option
+		click(midpoint(current_option_roi))
+		time.sleep(0.5)
+		
+		yield text
+
+		counter += 1
+
+		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[y2+dropdown['sample_margin_y']][x1:x1+30]]):
+			break
+	
+	# Move back to top option
+	for _ in range(counter - dropdown['num_visible_options']):
+		pyautogui.click(dropdown['up_button'])
+		time.sleep(0.1)
+	pyautogui.keyDown('shift') # focus back on date
+	pyautogui.press('tab')
+	pyautogui.keyUp('shift')
+
+	return
+
+def interact_dropdown(dropdown: dict, save_path: Path):
+	eye = dropdown['eye'].upper()
+	x1, base_y = dropdown['loc']
+	x2 = x1 + dropdown['width']
+	counter = 0
+	dropdown_options = []
+
+	# Counters for # of scans of each type
+	num_optic_disc = 0
+	num_mac_cube = 0
+	num_onh = 0
+	num_6x6 = 0
+	num_3x3 = 0
+	num_hd21 = 0
+	num_unknown = 0
+
+	while True:
+		#failsafe
+		if(counter > dropdown['max_options']):
+			break
+
+		if counter >= dropdown['num_visible_options']:
+			pyautogui.click(dropdown['down_button'])
+			time.sleep(0.1)
+
+		y1 = int(base_y + min(counter, dropdown['num_visible_options'] - 1)*dropdown['option_height'])
+		y2 = int(y1 + dropdown['option_height'])
+		current_option_roi = (x1, y1, x2, y2)
+		s = screenshot()
+		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[(y1+y2)//2][x1:x1+30]]):
+			break
 
 		results = run_tesseract(s, current_option_roi, 10, psm=6)
 		text = process_dropdown_text(results['text'])
@@ -240,61 +314,50 @@ def interact_dropdown(dropdown: dict, save_path: Path):
 
 		# Optic Disc
 		if "optic disc cube" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
-			time.sleep(0.1)
+			pyautogui.click(midpoint((x1, y1, x1+30, y2))) # use x1+30 instead of x2 so that hover hint doesn't spill into third dropdown
+			time.sleep(0.2)
 			export_optic_disc(save_path, eye)
+			num_optic_disc += 1
 		# Macular Cube
-		if "macular cube" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
-			time.sleep(0.1)
-			export_mac_cube(save_path)
+		elif "macular cube" in text:
+			pyautogui.click(midpoint((x1, y1, x1+30, y2)))
+			time.sleep(0.2)
+			export_mac_cube(save_path, eye)
+			num_mac_cube += 1
 		# ONH Angiography
-		elif "onh angio" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
-			time.sleep(0.1)
+		elif "onh angio" in text or ("angio" in text and "4.5" in text):
+			pyautogui.click(midpoint((x1, y1, x1+30, y2)))
+			time.sleep(0.5)
 			export_onh(save_path)
+			num_onh += 1
 		# 6x6 Angiography
 		elif "angio" in text and "6x6" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
-			time.sleep(0.1)
+			pyautogui.click(midpoint((x1, y1, x1+30, y2)))
+			time.sleep(0.2)
 			export_6x6(save_path)
+			num_6x6 += 1
 		# 3x3 Angiography
 		elif "angio" in text and "3x3" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
-			time.sleep(0.1)
+			pyautogui.click(midpoint((x1, y1, x1+30, y2)))
+			time.sleep(0.2)
 			export_3x3(save_path)
+			num_3x3 += 1
 		# HD21
 		elif "hd 21" in text:
-			pyautogui.click(midpoint((x1, y1, x2, y2)))
+			pyautogui.click(midpoint((x1, y1, x1+30, y2)))
+			time.sleep(0.2)
 			export_hd21(save_path)
+			num_hd21 += 1
 		# Other
 		else:
-			print(f"UNRECOGNIZED SCAN: '{text}'")
+			#print(f"UNKNOWN SCAN: {text}")
+			num_unknown += 1
 
-		done = np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[y2+dropdown['sample_margin_y']][x1:x1+30]])
-		
-		#failsafe
-		if(counter > dropdown['max_options']):
-			break
-		
 		counter += 1
-	
-	# if(len(dropdown_options) <= dropdown['num_visible_options']):
-	# 	y1 = int(base_y + target_onh_option_num*dropdown['option_height'])
-	# 	y2 = int(y1 + dropdown['option_height'])
-	# else:
-	# 	for _ in range((len(dropdown_options) - dropdown['num_visible_options']) - target_onh_option_num):
-	# 		pyautogui.click(dropdown['up_button'])
-	# 		time.sleep(0.1)
-	# 	y1 = int(base_y)
-	# 	y2 = int(y1 + dropdown['option_height'])
-	
-	# pyautogui.click(midpoint((x1, y1, x2, y2)))
+		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[y2+dropdown['sample_margin_y']][x1:x1+30]]):
+			break
 
-	print("\n".join(dropdown_options))
-	return
-
-	return max_score
+	return dropdown_options, (num_optic_disc, num_mac_cube, num_onh, num_6x6, num_3x3, num_hd21, num_unknown)
 
 def wait_for_czmi_search(timeout_sec=30):
 	timer = 0
@@ -330,7 +393,7 @@ def wait_for_chart_open(timeout_sec=30):
 		timer += sleep_time
 	return True
 
-def wait_for_scan_loading(timeout_sec=30):
+def wait_for_loading_popup(timeout_sec=30):
 	timer = 0
 	done_counter = 0
 	sleep_time = 0.5
@@ -346,18 +409,18 @@ def wait_for_scan_loading(timeout_sec=30):
 		timer += sleep_time
 	return True
 
-def get_exam_date_time(exam_date_time_bbox):
-	s = screenshot()
-	results = run_tesseract(s, exam_date_time_bbox, 10)
-	text = " ".join(results["text"]).lower()
-	
-	if(text[0:4] != "date"):
-		raise RuntimeError("Could not parse exam date time")
-	
-	date_regexp = re.compile("\d{1,2}\/\d{1,2}\/\d{4}")
-	date_str = re.search(date_regexp, text).group()
-
-	time_regexp = re.compile("\d{1,2}:\d{1,2}:\d{2}\s?[ap]m")
-	time_str = re.search(time_regexp, text).group()
-
-	return (date_str, time_str)
+def wait_for_scan_subdata_load(timeout_sec=30):
+	timer = 0
+	done_counter = 0
+	sleep_time = 0.3
+	while done_counter < 3:
+		if(timer > timeout_sec):
+			return False
+		s = screenshot()
+		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[65:145,1235:1760]]):
+			done_counter = 0
+		else:
+			done_counter += 1
+		time.sleep(sleep_time)
+		timer += sleep_time
+	return True
