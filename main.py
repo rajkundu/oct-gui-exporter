@@ -14,13 +14,13 @@ PATIENT_ID_ENTRY = (417, 167)
 FIRST_PATIENT = (50, 300, 115, 315)
 FINISH_BUTTON = (1840, 1024)
 
-EXPORT_BASE_PATH = Path("D:/AutoExport")
+EXPORT_BASE_PATH = Path("D:/AutoExport_Raj")
 OUTPUT_CSV_PATH = EXPORT_BASE_PATH / "output_main.csv"
 
 img = utils.screenshot()
 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-# cv2.imshow('ss', img) #cv2.imread("F:/eye/1.png"))
+# cv2.imshow('ss', img)
 # cv2.waitKey(0)
 # sys.exit(0)
 
@@ -66,6 +66,8 @@ def get_data(pt_id, eye):
 	if eye not in ("OD", "OS"):
 		raise ValueError("eye param must be one of ('OD', 'OS')")
 
+	# Verify we're on CZMI entry page before anything
+	utils.verify_czmi_entry_page()
 
 	# 1) Activate patient ID field
 	pyautogui.click(PATIENT_ID_ENTRY)
@@ -94,21 +96,33 @@ def get_data(pt_id, eye):
 		dropdown = EYE_LEFT_DROPDOWN
 	else:
 		dropdown = EYE_RIGHT_DROPDOWN
-	save_path = EXPORT_BASE_PATH / f"{pt_id.upper()}_{eye}" # folder name = CZMI000000001_OD
-	save_path.mkdir(parents=True, exist_ok=True) # ensure pt. folder exists
 
 	#print(f"{pt_id}_{eye}")
 	#print("date\t\toptic\tmaccb\tonh  \t6x6  \t3x3  \thd21 \tunknw")
 	ret_data = []
+	pt_id_path = EXPORT_BASE_PATH / pt_id.upper()
 	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN):
+		pt_id_date_path = pt_id_path / date.replace("/", ".")
+		save_path = pt_id_date_path / eye.upper() # subfolder path = CZMI000000001/4.22.2022/OD
+		save_path.mkdir(parents=True, exist_ok=True) # create save folder if doesn't exist
+
 		ret = utils.interact_dropdown(dropdown, save_path)
 		scan_names, (num_optic_disc, num_mac_cube, num_onh, num_6x6, num_3x3, num_hd21, num_unknown) = ret
 		#print(f"{date}\t{num_optic_disc}\t{num_mac_cube}\t{num_onh}\t{num_6x6}\t{num_3x3}\t{num_hd21}\t{num_unknown}")
-		with open(str(save_path / "scan_list.txt"), 'a') as scan_list_file:
-			scan_list_file.write(f"DATE: {date}\n")
-			for scan_name in scan_names:
-				scan_list_file.write(scan_name + "\n")
-		ret_data.append((date, ret))
+		if len(scan_names) > 0:
+			with open(str(save_path / "scan_list.txt"), 'a') as scan_list_file:
+				for scan_name in scan_names:
+					scan_list_file.write(scan_name + "\n")
+			ret_data.append((date, ret))
+		else:
+			# if eye folder has no data, delete it
+			save_path.rmdir()
+		# if date folder has no eye subfolders, delete it
+		if not any(pt_id_date_path.iterdir()):
+			pt_id_date_path.rmdir()
+	# if pt folder has no date subfolders, delete it
+	if not any(pt_id_path.iterdir()):
+		pt_id_path.rmdir()
 	
 	# 7) Click finish
 	pyautogui.click(FINISH_BUTTON)
@@ -122,6 +136,7 @@ if __name__ == "__main__":
 		with open(str(OUTPUT_CSV_PATH), 'w') as output_csv:
 			output_csv.write(",".join([
 				"CZMI_EYE",
+				"OD1_OS2",
 				"NUM_TOTAL_DATES",
 				"DATE",
 				"NUM_OPTIC_DISC",
@@ -149,6 +164,7 @@ if __name__ == "__main__":
 					scan_names, (num_optic_disc, num_mac_cube, num_onh, num_6x6, num_3x3, num_hd21, num_unknown) = ret
 					csv_row = ",".join([
 						pt_id + "_" + od_os,
+						"1" if od_os == "OD" else "2",
 						str(len(data)),
 						date,
 						str(num_optic_disc),
@@ -160,15 +176,28 @@ if __name__ == "__main__":
 						str(num_unknown)
 					])
 					csv_rows.append(csv_row)
+				if len(data) == 0: # 0 visits total
+					csv_row = ",".join([
+						pt_id + "_" + od_os,
+						"1" if od_os == "OD" else "2",
+						"0"
+					])
+					csv_rows.append(csv_row)
 				print(f"Finished {line}")
+			except pyautogui.FailSafeException as e:
+				raise e
+			except AssertionError as e:
+				print(f"Assertion failed: {str(e)}")
+				print("Exiting...")
+				raise e
 			except Exception as e:
-				if isinstance(e, pyautogui.FailSafeException): # raise PyAutoGui failsafe exception
-					raise e
 				csv_row = ",".join([
 					pt_id + "_" + od_os,
+					"1" if od_os == "OD" else "2",
 					"[ERROR]",
 					str(e)
 				])
+				csv_rows.append(csv_row)
 				print(f"[ERROR] {str(e)}")
 
 			with open(str(OUTPUT_CSV_PATH), "a") as output_csv:

@@ -359,6 +359,11 @@ def interact_dropdown(dropdown: dict, save_path: Path):
 
 	return dropdown_options, (num_optic_disc, num_mac_cube, num_onh, num_6x6, num_3x3, num_hd21, num_unknown)
 
+def verify_czmi_entry_page():
+	s = screenshot()
+	crop = s[160:170,1802:1810] # gray search box
+	assert np.all([np.allclose(px, (225, 225, 225), atol=10, rtol=0) for px in crop]), "Expected gray search box, but not found."
+
 def wait_for_czmi_search(timeout_sec=30):
 	timer = 0
 	done_counter = 0
