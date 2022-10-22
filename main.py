@@ -79,8 +79,8 @@ def get_data(pt_id, eye):
 	pyautogui.press('backspace')
 	pyautogui.typewrite(pt_id)
 	pyautogui.press('enter')
-	if not utils.wait_for_czmi_search(timeout_sec=8):
-		raise TimeoutError(f"Search for chart of pt {pt_id} exceeded 8 sec")
+	if not utils.wait_for_czmi_search(timeout_sec=15):
+		raise TimeoutError(f"Search for chart of pt {pt_id} exceeded 15 sec")
 	
 	# If the row where the patient's record should be (FIRST_PATIENT) is all white, then patient's CZMI returned 0 records
 	if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in utils.screenshot(roi=FIRST_PATIENT)]):
@@ -88,8 +88,8 @@ def get_data(pt_id, eye):
 
 	# 3) Open patient chart
 	pyautogui.doubleClick(utils.midpoint(FIRST_PATIENT))
-	if not utils.wait_for_chart_open(timeout_sec=10):
-		raise TimeoutError(f"Opening chart of pt {pt_id} exceeded 10 sec")
+	if not utils.wait_for_chart_open(timeout_sec=20):
+		raise TimeoutError(f"Opening chart of pt {pt_id} exceeded 20 sec")
 
 	# 4) Dropdown stuff
 	if eye == "OS":
@@ -102,7 +102,7 @@ def get_data(pt_id, eye):
 	ret_data = []
 	pt_id_path = EXPORT_BASE_PATH / pt_id.upper()
 	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN):
-		pt_id_date_path = pt_id_path / date.replace("/", ".")
+		pt_id_date_path = pt_id_path / date
 		save_path = pt_id_date_path / eye.upper() # subfolder path = CZMI000000001/4.22.2022/OD
 		save_path.mkdir(parents=True, exist_ok=True) # create save folder if doesn't exist
 

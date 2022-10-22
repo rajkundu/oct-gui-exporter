@@ -5,6 +5,7 @@ pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesserac
 import pyautogui
 import time
 from pathlib import Path
+import re
 
 def screenshot(roi=None):
 	s = cv2.cvtColor(np.array(pyautogui.screenshot().convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -24,7 +25,7 @@ def scale_img(img, scaling_factor):
 	height, width = img.shape[:2]
 	return cv2.resize(img, (int(width * scaling_factor), int(height * scaling_factor)), interpolation = cv2.INTER_AREA)
 
-def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=False, psm=None):
+def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=False, psm=None, char_whitelist=None):
 	if roi is None:
 		roi = (0, 0, img.shape[1], img.shape[0])
 	x1, y1, x2, y2 = roi
@@ -42,9 +43,15 @@ def run_tesseract(img, roi, min_conf, scaling_factor=1.0, blur_size=0, disp=Fals
 		cv2.waitKey(0)
 
 	# Build config
-	cfgstr = ""
+	cfgstrs = []
 	if psm is not None:
-		cfgstr += f"--psm {psm}"
+		cfgstrs.append(f"--psm {psm}")
+	if char_whitelist is not None:
+		cfgstrs.append(f"tessedit_char_whitelist={char_whitelist}")
+	
+	cfgstr = ""
+	if len(cfgstrs) > 0:
+		cfgstr = " ".join(cfgstrs)
 
 	results = pytesseract.image_to_data(img_cropped, output_type=pytesseract.Output.DICT, config=cfgstr)
 	# filter out weak confidence text localizations
@@ -252,27 +259,22 @@ def visit_dates_generator(dropdown: dict):
 		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[(y1+y2)//2][x1:x1+30]]):
 			break
 
-		results = run_tesseract(s, current_option_roi, 10, psm=6, disp=False)
+		results = run_tesseract(s, current_option_roi, 10, psm=6, disp=False, char_whitelist="0123456789/")
 		text = process_dropdown_text(results['text'])
 
 		# Click on option
 		click(midpoint(current_option_roi))
 		time.sleep(0.5)
-		
+
+		match = re.search("\d{1,2}\/\d{1,2}\/\d{4}", text)
+		if match is not None:
+			text = match.group()
+		text = text.replace("/", ".")
 		yield text
 
 		counter += 1
-
 		if np.all([np.allclose(px, dropdown['empty_color'], atol=10, rtol=0) for px in s[y2+dropdown['sample_margin_y']][x1:x1+30]]):
 			break
-	
-	# Move back to top option
-	for _ in range(counter - dropdown['num_visible_options']):
-		pyautogui.click(dropdown['up_button'])
-		time.sleep(0.1)
-	pyautogui.keyDown('shift') # focus back on date
-	pyautogui.press('tab')
-	pyautogui.keyUp('shift')
 
 	return
 
