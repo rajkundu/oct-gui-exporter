@@ -123,10 +123,6 @@ def get_data(pt_id, eye):
 	# if pt folder has no date subfolders, delete it
 	if not any(pt_id_path.iterdir()):
 		pt_id_path.rmdir()
-	
-	# 7) Click finish
-	pyautogui.click(FINISH_BUTTON)
-	time.sleep(1)
 
 	return ret_data
 
@@ -153,7 +149,7 @@ if __name__ == "__main__":
 
 			# Skip lines that begin with "#"
 			if line[0] == "#":
-				print(f"Skipping '{line}'")
+				# print(f"Skipping '{line}'")
 				continue
 
 			pt_id, od_os = line[:-3].upper(), line[-2:].upper()
@@ -199,6 +195,10 @@ if __name__ == "__main__":
 				])
 				csv_rows.append(csv_row)
 				print(f"[ERROR] {str(e)}")
+			finally:
+				# Click finish button to close patient chart
+				pyautogui.click(FINISH_BUTTON)
+				time.sleep(1)
 
 			with open(str(OUTPUT_CSV_PATH), "a") as output_csv:
 					for csv_row in csv_rows:

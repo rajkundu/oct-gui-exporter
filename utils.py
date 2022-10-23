@@ -112,6 +112,7 @@ def export_optic_disc(save_path: Path, eye: str):
 	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
 	if not wait_for_loading_popup():
 		return False
+	check_warning_dialog()
 
 	# Right click on scan
 	if eye == 'OD':
@@ -143,6 +144,7 @@ def export_mac_cube(save_path: Path, eye: str):
 	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
 	if not wait_for_loading_popup():
 		return False
+	check_warning_dialog()
 	
 	# Right click on scan
 	if eye == 'OD':
@@ -169,6 +171,7 @@ def export_onh(save_path: Path):
 	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
 	if not wait_for_loading_popup():
 		return False
+	check_warning_dialog()
 	
 	pyautogui.moveTo((780, 235)) # move to & click Fullscreen button
 	time.sleep(0.1)
@@ -191,6 +194,7 @@ def export_6x6(save_path: Path):
 	pyautogui.moveTo((960, 540)) # move to middle of screen to collapse dropdown
 	if not wait_for_loading_popup():
 		return False
+	check_warning_dialog()
 	
 	click((80, 430)) # open Superficial Capillary Plexus scan
 	time.sleep(0.2)
@@ -217,6 +221,7 @@ def export_hd21(save_path: Path):
 	# wait for scan load
 	if not wait_for_loading_popup():
 		return False
+	check_warning_dialog()
 
 	pyautogui.doubleClick((960, 540)) # enter fullscreen
 	time.sleep(0.1)
@@ -361,10 +366,17 @@ def interact_dropdown(dropdown: dict, save_path: Path):
 
 	return dropdown_options, (num_optic_disc, num_mac_cube, num_onh, num_6x6, num_3x3, num_hd21, num_unknown)
 
-def verify_czmi_entry_page():
-	s = screenshot()
-	crop = s[160:170,1802:1810] # gray search box
-	assert np.all([np.allclose(px, (225, 225, 225), atol=10, rtol=0) for px in crop]), "Expected gray search box, but not found."
+def verify_czmi_entry_page(timeout_sec=5):
+	timer = 0
+	sleep_time = 0.3
+	while timer < timeout_sec:
+		s = screenshot()
+		crop = s[160:170,1802:1810] # gray search box
+		if np.all([np.allclose(px, (225, 225, 225), atol=10, rtol=0) for px in crop]):
+			return True
+		time.sleep(sleep_time)
+		timer += sleep_time
+	raise AssertionError("Expected gray search box, but not found.")
 
 def wait_for_czmi_search(timeout_sec=30):
 	timer = 0
@@ -408,7 +420,7 @@ def wait_for_loading_popup(timeout_sec=30):
 		if(timer > timeout_sec):
 			return False
 		s = screenshot()
-		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[480:600,810:930]]):
+		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[480:600,810:910]]):
 			done_counter = 0
 		else:
 			done_counter += 1
@@ -430,4 +442,12 @@ def wait_for_scan_subdata_load(timeout_sec=30):
 			done_counter += 1
 		time.sleep(sleep_time)
 		timer += sleep_time
+	return True
+
+def check_warning_dialog():
+	s = screenshot()
+	crop = s[535:550,825:826] # yellow column in hazard symbol
+	if np.all([np.allclose(px, (0, 225, 252), atol=10, rtol=0) for px in crop]):
+		pyautogui.press('esc') # close warning dialog
+		raise RuntimeError("Encountered unknown error")
 	return True
