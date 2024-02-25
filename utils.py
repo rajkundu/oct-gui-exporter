@@ -6,6 +6,7 @@ import pyautogui
 import time
 from pathlib import Path
 import re
+import datetime
 
 def screenshot(roi=None):
 	s = cv2.cvtColor(np.array(pyautogui.screenshot().convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -198,7 +199,15 @@ def export_6x6(save_path: Path):
 	
 	click((80, 430)) # open Superficial Capillary Plexus scan
 	time.sleep(0.2)
-	
+
+	# Ensure no overlay
+	click((1420, 760)) # click "trace"
+	time.sleep(0.1)
+	click((1330, 760)) # click "map"
+	time.sleep(0.1)
+	click((1330, 760)) # click "map" again to disable
+	time.sleep(0.1)
+
 	pyautogui.moveTo((857, 235)) # move to & click Fullscreen button
 	time.sleep(0.1)
 	click()
@@ -228,8 +237,8 @@ def export_hd21(save_path: Path):
 
 	rightClick((960, 540)) # right click in center of screen for context menu
 	pyautogui.press('s') # open save dialog
-	time.sleep(0.1)
 
+	time.sleep(0.1)
 	interact_save_dialog(save_path)
 
 	# exit fullscreen
@@ -239,7 +248,7 @@ def export_hd21(save_path: Path):
 
 	return True
 
-def visit_dates_generator(dropdown: dict):
+def visit_dates_generator(dropdown: dict, min_datetime=None):
 	x1, base_y = dropdown['loc']
 	x2 = x1 + dropdown['width']
 	counter = 0
@@ -275,6 +284,10 @@ def visit_dates_generator(dropdown: dict):
 		if match is not None:
 			text = match.group()
 		text = text.replace("/", ".")
+
+		if min_datetime is not None and datetime.datetime.strptime(text, "%m.%d.%Y").date() < min_datetime: # only export dates past MIN_DATETIME
+			break
+
 		yield text
 
 		counter += 1
@@ -378,6 +391,25 @@ def verify_czmi_entry_page(timeout_sec=5):
 		timer += sleep_time
 	raise AssertionError("Expected gray search box, but not found.")
 
+def wait_for_finish_button_active(timeout_sec=30):
+	timer = 0
+	done_counter = 0
+	sleep_time = 0.3
+	while done_counter < 1:
+		if timer > timeout_sec:
+			return False
+		pyautogui.moveTo((1790, 1015))
+		time.sleep(0.1)
+		s = screenshot()
+		crop = s[1015:1025,1790:1800]
+		if not np.all([np.allclose(px, (250, 241, 231), atol=10, rtol=0) for px in crop]):
+			done_counter = 0
+		else:
+			done_counter += 1
+		time.sleep(sleep_time)
+		timer += sleep_time
+	return True
+
 def wait_for_czmi_search(timeout_sec=30):
 	timer = 0
 	done_counter = 0
@@ -418,6 +450,8 @@ def wait_for_loading_popup(timeout_sec=30):
 	sleep_time = 0.5
 	while done_counter < 3:
 		if(timer > timeout_sec):
+			# possible that loading took forever because of warning dialog
+			check_warning_dialog()
 			return False
 		s = screenshot()
 		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[480:600,810:910]]):
@@ -446,8 +480,12 @@ def wait_for_scan_subdata_load(timeout_sec=30):
 
 def check_warning_dialog():
 	s = screenshot()
-	crop = s[535:550,825:826] # yellow column in hazard symbol
-	if np.all([np.allclose(px, (0, 225, 252), atol=10, rtol=0) for px in crop]):
+	# crop_yellow = s[535:550,825:826] # yellow column in hazard symbol
+	# crop_blue = s[592:605,1131:1132] # blue column in close button focus outline
+	# if np.all([np.allclose(px, (0, 225, 252), atol=10, rtol=0) for px in crop_yellow]) or np.all([np.allclose(px, (215, 120, 0), atol=10, rtol=0) for px in crop_blue]):
+	crop_gray = s[582:618,782:794]
+	if np.all([np.allclose(px, (235, 235, 235), atol=10, rtol=0) for px in crop_gray]):
 		pyautogui.press('esc') # close warning dialog
+		time.sleep(10) # wait 10 sec to ensure dialog closed, loading terminated, etc
 		raise RuntimeError("Encountered unknown error")
 	return True

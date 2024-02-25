@@ -5,6 +5,8 @@ import cv2
 import time
 import utils
 from pathlib import Path
+import random
+import datetime
 
 # User switches to application
 time.sleep(3)
@@ -16,12 +18,35 @@ FINISH_BUTTON = (1840, 1024)
 
 EXPORT_BASE_PATH = Path("D:/AutoExport_Raj")
 OUTPUT_CSV_PATH = EXPORT_BASE_PATH / "output_main.csv"
+MIN_DATETIME = datetime.datetime.strptime('11/10/2022', "%m/%d/%Y").date()
 
 img = utils.screenshot()
 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 # cv2.imshow('ss', img)
 # cv2.waitKey(0)
+
+# ctr = 0
+# while True:
+# 	img = utils.screenshot()
+# 	crop = img[221:917,331:1379].copy()
+# 	mask = np.zeros(crop.shape[:-1], dtype=np.uint8)
+# 	mask[np.logical_and(crop[:,:,2] >= 240, (crop[:,:,0]+crop[:,:,1]) < 50)] = 255
+
+# 	# Get Xs, Ys of red points in global coordinates
+# 	ys, xs = np.where(mask == 255)
+# 	xs += 331
+# 	ys += 221
+# 	if xs.shape[0] == 0: # break once no more measurements detected
+# 		break
+
+# 	idx = random.choice(range(len(xs)))
+# 	utils.click((xs[idx], ys[idx])) # click measurement
+# 	time.sleep(0.1)
+# 	utils.click((1360, 190)) # click delete button
+# 	time.sleep(0.1)
+# 	ctr += 1
+# print(f"Done after {ctr} tries")
 # sys.exit(0)
 
 VISIT_DATES_DROPDOWN = {
@@ -72,15 +97,19 @@ def get_data(pt_id, eye):
 	# 1) Activate patient ID field
 	pyautogui.click(PATIENT_ID_ENTRY)
 	time.sleep(0.7)
-	pyautogui.doubleClick(PATIENT_ID_ENTRY)
-	time.sleep(0.1)
 
 	# 2) Enter patient ID and search
+	pyautogui.doubleClick(PATIENT_ID_ENTRY)
+	time.sleep(0.1)
+	pyautogui.press('backspace')
+	pyautogui.typewrite('-----') # enter something with no matches to clear search results area
+	pyautogui.press('enter')
+	time.sleep(0.1)
+	pyautogui.doubleClick(PATIENT_ID_ENTRY)
+	time.sleep(0.1)
 	pyautogui.press('backspace')
 	pyautogui.typewrite(pt_id)
 	pyautogui.press('enter')
-	if not utils.wait_for_czmi_search(timeout_sec=15):
-		raise TimeoutError(f"Search for chart of pt {pt_id} exceeded 15 sec")
 	
 	# If the row where the patient's record should be (FIRST_PATIENT) is all white, then patient's CZMI returned 0 records
 	if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in utils.screenshot(roi=FIRST_PATIENT)]):
@@ -101,7 +130,7 @@ def get_data(pt_id, eye):
 	#print("date\t\toptic\tmaccb\tonh  \t6x6  \t3x3  \thd21 \tunknw")
 	ret_data = []
 	pt_id_path = EXPORT_BASE_PATH / pt_id.upper()
-	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN):
+	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN, min_datetime=MIN_DATETIME):
 		pt_id_date_path = pt_id_path / date
 		save_path = pt_id_date_path / eye.upper() # subfolder path = CZMI000000001/4.22.2022/OD
 		save_path.mkdir(parents=True, exist_ok=True) # create save folder if doesn't exist
@@ -131,6 +160,7 @@ if __name__ == "__main__":
 	if not OUTPUT_CSV_PATH.exists():
 		with open(str(OUTPUT_CSV_PATH), 'w') as output_csv:
 			output_csv.write(",".join([
+				"DATETIME",
 				"CZMI_EYE",
 				"OD1_OS2",
 				"NUM_TOTAL_DATES",
@@ -197,9 +227,11 @@ if __name__ == "__main__":
 				print(f"[ERROR] {str(e)}")
 			finally:
 				# Click finish button to close patient chart
+				utils.wait_for_finish_button_active()
 				pyautogui.click(FINISH_BUTTON)
 				time.sleep(1)
 
 			with open(str(OUTPUT_CSV_PATH), "a") as output_csv:
 					for csv_row in csv_rows:
-						output_csv.write(csv_row + "\n")
+						time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+						output_csv.write(f"{time_str},{csv_row}\n")
