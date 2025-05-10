@@ -1,4 +1,4 @@
-# OCT GUI Auto-Exporter
+# OCT GUI Exporter
 An **unofficial** tool for exporting OCT images and analyses from proprietary manufacturer software through GUI automation. Currently supports Zeiss Cirrus HD-OCT Review software ONLY, although the concepts are easily transferable.
 
 
