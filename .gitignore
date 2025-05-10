@@ -3,4 +3,5 @@ __pycache__/
 
 # Input/Output files
 **.txt
+!requirements.txt
 **.csv

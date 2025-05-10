@@ -280,13 +280,10 @@ def visit_dates_generator(dropdown: dict, min_datetime=None):
 		click(midpoint(current_option_roi))
 		time.sleep(0.5)
 
-		match = re.search("\d{1,2}\/\d{1,2}\/\d{4}", text)
+		match = re.search(r"\d{1,2}\/\d{1,2}\/\d{4}", text)
 		if match is not None:
 			text = match.group()
 		text = text.replace("/", ".")
-
-		if min_datetime is not None and datetime.datetime.strptime(text, "%m.%d.%Y").date() < min_datetime: # only export dates past MIN_DATETIME
-			break
 
 		yield text
 
@@ -384,12 +381,12 @@ def verify_czmi_entry_page(timeout_sec=5):
 	sleep_time = 0.3
 	while timer < timeout_sec:
 		s = screenshot()
-		crop = s[160:170,1802:1810] # gray search box
-		if np.all([np.allclose(px, (225, 225, 225), atol=10, rtol=0) for px in crop]):
+		crop = s[77:78,30:190] # look for gray background of "Find existing Patient" tab
+		if np.all([np.allclose(px, (249, 249, 249), atol=10, rtol=0) for px in crop]):
 			return True
 		time.sleep(sleep_time)
 		timer += sleep_time
-	raise AssertionError("Expected gray search box, but not found.")
+	raise AssertionError("Expected gray 'Find Existing Patient' tab, but not found.")
 
 def wait_for_finish_button_active(timeout_sec=30):
 	timer = 0
@@ -410,7 +407,18 @@ def wait_for_finish_button_active(timeout_sec=30):
 		timer += sleep_time
 	return True
 
-def wait_for_czmi_search(timeout_sec=30):
+def search_czmi(pt_id, timeout_sec=30):
+	# capture initial screenshot of "Search" button
+	s_initial = screenshot()
+	crop_initial = s_initial[160:175,1760:1800]
+
+	# execute search
+	pyautogui.press('backspace')
+	pyautogui.typewrite(pt_id)
+	pyautogui.press('enter')
+	time.sleep(0.1)
+
+	# wait for "Search" button, which now says "Stop", to say "Search" again by comparing screenshot to initial (no OCR...)
 	timer = 0
 	done_counter = 0
 	sleep_time = 0.3
@@ -418,8 +426,8 @@ def wait_for_czmi_search(timeout_sec=30):
 		if timer > timeout_sec:
 			return False
 		s = screenshot()
-		crop = s[160:170,1795:1810] # 'h' in "Search" disappears 
-		if np.all([np.allclose(px, (225, 225, 225), atol=10, rtol=0) for px in crop]):
+		crop = s[160:175,1760:1800]
+		if not np.allclose(crop, crop_initial, atol=10, rtol=0):
 			done_counter = 0
 		else:
 			done_counter += 1
@@ -454,7 +462,8 @@ def wait_for_loading_popup(timeout_sec=30):
 			check_warning_dialog()
 			return False
 		s = screenshot()
-		if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in s[480:600,810:910]]):
+		crop = s[433:434,910:1100] # light blue header of "Loading" popup
+		if np.all([np.allclose(px, (249, 243, 240), atol=10, rtol=0) for px in crop]):
 			done_counter = 0
 		else:
 			done_counter += 1

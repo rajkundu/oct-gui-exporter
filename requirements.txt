@@ -1,0 +1,4 @@
+numpy
+pyautogui
+opencv-python
+pytesseract

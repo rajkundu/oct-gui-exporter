@@ -16,38 +16,12 @@ PATIENT_ID_ENTRY = (417, 167)
 FIRST_PATIENT = (50, 300, 115, 315)
 FINISH_BUTTON = (1840, 1024)
 
-EXPORT_BASE_PATH = Path("D:/AutoExport_Raj")
+EXPORT_BASE_PATH = Path("E:/AutoExport_Raj")
 OUTPUT_CSV_PATH = EXPORT_BASE_PATH / "output_main.csv"
-MIN_DATETIME = datetime.datetime.strptime('11/10/2022', "%m/%d/%Y").date()
+MIN_DATETIME = None #datetime.datetime.strptime('01/31/2020', "%m/%d/%Y").date()
 
 img = utils.screenshot()
 img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-# cv2.imshow('ss', img)
-# cv2.waitKey(0)
-
-# ctr = 0
-# while True:
-# 	img = utils.screenshot()
-# 	crop = img[221:917,331:1379].copy()
-# 	mask = np.zeros(crop.shape[:-1], dtype=np.uint8)
-# 	mask[np.logical_and(crop[:,:,2] >= 240, (crop[:,:,0]+crop[:,:,1]) < 50)] = 255
-
-# 	# Get Xs, Ys of red points in global coordinates
-# 	ys, xs = np.where(mask == 255)
-# 	xs += 331
-# 	ys += 221
-# 	if xs.shape[0] == 0: # break once no more measurements detected
-# 		break
-
-# 	idx = random.choice(range(len(xs)))
-# 	utils.click((xs[idx], ys[idx])) # click measurement
-# 	time.sleep(0.1)
-# 	utils.click((1360, 190)) # click delete button
-# 	time.sleep(0.1)
-# 	ctr += 1
-# print(f"Done after {ctr} tries")
-# sys.exit(0)
 
 VISIT_DATES_DROPDOWN = {
 	"loc": (10, 63),
@@ -101,15 +75,7 @@ def get_data(pt_id, eye):
 	# 2) Enter patient ID and search
 	pyautogui.doubleClick(PATIENT_ID_ENTRY)
 	time.sleep(0.1)
-	pyautogui.press('backspace')
-	pyautogui.typewrite('-----') # enter something with no matches to clear search results area
-	pyautogui.press('enter')
-	time.sleep(0.1)
-	pyautogui.doubleClick(PATIENT_ID_ENTRY)
-	time.sleep(0.1)
-	pyautogui.press('backspace')
-	pyautogui.typewrite(pt_id)
-	pyautogui.press('enter')
+	utils.search_czmi(pt_id)
 	
 	# If the row where the patient's record should be (FIRST_PATIENT) is all white, then patient's CZMI returned 0 records
 	if np.all([np.allclose(px, (255, 255, 255), atol=10, rtol=0) for px in utils.screenshot(roi=FIRST_PATIENT)]):
@@ -127,10 +93,13 @@ def get_data(pt_id, eye):
 		dropdown = EYE_RIGHT_DROPDOWN
 
 	#print(f"{pt_id}_{eye}")
-	#print("date\t\toptic\tmaccb\tonh  \t6x6  \t3x3  \thd21 \tunknw")
 	ret_data = []
 	pt_id_path = EXPORT_BASE_PATH / pt_id.upper()
-	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN, min_datetime=MIN_DATETIME):
+	for date in utils.visit_dates_generator(VISIT_DATES_DROPDOWN):
+		 # skip dates before MIN_DATETIME
+		if MIN_DATETIME is not None and datetime.datetime.strptime(date, "%m.%d.%Y").date() < MIN_DATETIME:
+			continue
+
 		pt_id_date_path = pt_id_path / date
 		save_path = pt_id_date_path / eye.upper() # subfolder path = CZMI000000001/4.22.2022/OD
 		save_path.mkdir(parents=True, exist_ok=True) # create save folder if doesn't exist
@@ -147,10 +116,10 @@ def get_data(pt_id, eye):
 			# if eye folder has no data, delete it
 			save_path.rmdir()
 		# if date folder has no eye subfolders, delete it
-		if not any(pt_id_date_path.iterdir()):
+		if pt_id_date_path.exists() and not any(pt_id_date_path.iterdir()):
 			pt_id_date_path.rmdir()
 	# if pt folder has no date subfolders, delete it
-	if not any(pt_id_path.iterdir()):
+	if pt_id_path.exists() and not any(pt_id_path.iterdir()):
 		pt_id_path.rmdir()
 
 	return ret_data
@@ -176,6 +145,10 @@ if __name__ == "__main__":
 	with open("input.txt", "r") as input_txt:
 		for line in input_txt:
 			line = line.strip().upper()
+
+			# Skip empty (after stripping) lines
+			if not line:
+				continue
 
 			# Skip lines that begin with "#"
 			if line[0] == "#":
@@ -217,6 +190,11 @@ if __name__ == "__main__":
 				print("Exiting...")
 				raise e
 			except Exception as e:
+				# NOTE: once you have your export sequences debugged & working well, you can
+				# comment out this "raise e" line below. This will hopefully allow the script
+				# to fail gracefully for unexpected errors rather than stall indefinitely
+				raise e
+
 				csv_row = ",".join([
 					pt_id + "_" + od_os,
 					"1" if od_os == "OD" else "2",
