@@ -5,3 +5,8 @@ __pycache__/
 **.txt
 !requirements.txt
 **.csv
+
+# Imaging
+*.tiff
+*.tif
+*.bmp
