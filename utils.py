@@ -86,18 +86,34 @@ def rightClick(*args, **kwargs):
 	pyautogui.rightClick(*args, **kwargs)
 	time.sleep(0.1)
 
-def interact_save_dialog(save_path: Path):
+def interact_save_dialog(save_path: Path, append=""):
 	pyautogui.keyDown('ctrl') # focus on path input bar
 	pyautogui.press('l')
 	pyautogui.keyUp('ctrl')
+	time.sleep(0.1)
 
 	pyautogui.typewrite(str(save_path))
 	pyautogui.press('enter')
+	time.sleep(0.1)
 	
 	pyautogui.keyDown('alt') # focus on image save type dropdown
 	pyautogui.press('t')
 	pyautogui.keyUp('alt')
+	time.sleep(0.1)
 	pyautogui.press('t') # press t to select TIFF
+	time.sleep(0.1)
+
+	if append != "":
+		pyautogui.click((557, 420)) # click on filename
+		time.sleep(0.1)
+		pyautogui.press('end') # move cursor to end of it
+		time.sleep(0.1)
+		pyautogui.hotkey('ctrl', 'left') # move cursor to before file ext
+		time.sleep(0.1)
+		pyautogui.press('left') # move cursor to before .
+		time.sleep(0.1)
+		pyautogui.typewrite(append)
+		time.sleep(0.1)
 
 	pyautogui.press('enter') # save image & close dialog
 	time.sleep(0.1) # wait for dialog to close
@@ -232,21 +248,28 @@ def export_hd21(save_path: Path):
 		return False
 	check_warning_dialog()
 
-	pyautogui.doubleClick((960, 540)) # enter fullscreen
+	# scroll up to top B-scan, #1
+	counter = 0
+	while counter < 21:
+		click((313, 482)) # scroll up button (prev B-scan)
+		# 313, 494 = where to check pixel value = (133, 133, 133) for scroll bar being at top
+		counter += 1
 	time.sleep(0.1)
 
-	rightClick((960, 540)) # right click in center of screen for context menu
-	pyautogui.press('s') # open save dialog
+	# Export each individual B-scan
+	counter = 0
+	while counter < 21:
+		pyautogui.rightClick((960, 540)) # right click in center of screen for context menu
+		time.sleep(0.2)
+		pyautogui.press('s') # open save dialog
+		time.sleep(0.2)
 
-	time.sleep(0.1)
-	interact_save_dialog(save_path)
+		interact_save_dialog(save_path, append=f"_line{counter+1}")
 
-	# exit fullscreen
-	pyautogui.press('tab')
-	pyautogui.press('enter')
-	time.sleep(0.1)
-
-	return True
+		# Click scroll down button/go to next B-scan
+		pyautogui.click((313, 906))
+		time.sleep(0.2)
+		counter += 1
 
 def visit_dates_generator(dropdown: dict, min_datetime=None):
 	x1, base_y = dropdown['loc']
