@@ -40,7 +40,7 @@ This script was initially developed for use as an internal lab tool. Please forg
 
 #### Areas for Improvement
 - [ ] Improve OCR. Currently, it is very sensitive to whitespace and a bit unreliable.
-- [ ] Improve general error-handling. Currently, one patient with a corrupt image or chart can derail the entire export sequence. A robust way to handle unexpected errors would be great.
+- [ ] Improve general error-handling. Currently, one patient with a corrupt image or chart can halt the entire export sequence, requiring human intervention. A robust way to handle unexpected errors would be great.
 - [ ] Support more image types. Currently, only export sequences for a limited number of image types are programmed.
 
 ... and many more! Please feel free to **file an issue**, although it may not be resolved, to document feature requests, etc.
